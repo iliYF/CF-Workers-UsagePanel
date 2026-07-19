@@ -1,0 +1,56 @@
+name: Deploy to cf-pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - '_worker.js'
+      - 'wrangler.toml'
+      - '.github/workflows/cf-pages.yml'
+  workflow_dispatch:
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v6
+
+      - name: Set build version
+        id: version
+        run: |
+          echo "BUILD_TIME=$(TZ='Asia/Shanghai' date +'%Y-%m-%d %H:%M:%S')" >> $GITHUB_OUTPUT
+          echo "BUILD_TIMESTAMP=$(TZ='Asia/Shanghai' date +'%Y%m%d%H%M%S')" >> $GITHUB_OUTPUT
+
+      - name: Build cf-pages distribution
+        run: bash scripts/build-cf-pages.sh
+        env:
+          BUILD_VERSION: ${{ steps.version.outputs.BUILD_TIME }}
+
+      - name: Package distribution
+        run: |
+          cd dist
+          zip -r ../usage-panel-v${{ steps.version.outputs.BUILD_TIMESTAMP }}.zip .
+
+      # - name: Create Release
+      #   uses: softprops/action-gh-release@v3
+      #   with:
+      #     tag_name: v${{ steps.version.outputs.BUILD_TIMESTAMP }}
+      #     name: UsagePanel v${{ steps.version.outputs.BUILD_TIMESTAMP }}
+      #     body: |
+      #       Build time: ${{ steps.version.outputs.BUILD_TIME }} (UTC+8)
+      #       Commit: [${{ github.sha }}](https://github.com/${{ github.repository }}/commit/${{ github.sha }})
+      #     files: usage-panel-v${{ steps.version.outputs.BUILD_TIMESTAMP }}.zip
+      #     draft: false
+      #     prerelease: false
+
+      - name: Deploy to cf-pages branch
+        uses: peaceiris/actions-gh-pages@v4
+        with:
+          github_token: ${{ secrets.GITHUB_TOKEN }}
+          publish_branch: cf-pages
+          publish_dir: ./dist
+          commit_message: 'deploy: UsagePanel v${{ steps.version.outputs.BUILD_TIMESTAMP }}'
